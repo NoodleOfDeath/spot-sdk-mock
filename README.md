@@ -1,5 +1,10 @@
 # spot-sdk-mock
 
+![demo](assets/demo.gif)
+
+> Recorded with Playwright against the live local stack — `docker compose up` then
+> `cd tests/playwright && npx playwright test capture_demo.spec.ts && python ../../scripts/make_gif.py`.
+
 A three-tier sandbox that lets you exercise the upstream Spot SDK test suite
 in a browser, with no real robot required. Three services compose the stack:
 
@@ -14,29 +19,32 @@ in a browser, with no real robot required. Three services compose the stack:
 ```
 spot-sdk-mock/
   docker-compose.yml
+  conftest.py             # root pytest shim — registers --mock for the vendor suite
+  pytest.ini              # testpaths + pythonpath for the upstream tests
   README.md
   .gitignore
-  robot_mock/             # Python gRPC mock Spot — folder *is* the Python package (flat layout)
-    Dockerfile
-    pyproject.toml
-    __init__.py
-    server.py
-    state.py
-    servicers/
-    tests/
-      conftest.py
-      sdk/                # verbatim upstream bosdyn-client tests (DO NOT EDIT)
-        mission/          # bosdyn-mission upstream tests
-  api_mock/               # Express/TS API
-    Dockerfile
-    eslint.config.js
-    src/{index.ts, routes/*.ts, grpc/client.ts}
-    helpers/              # python helpers: scrape_manifest.py, robot_mock_helpers/get_state.py
-  web_mock/               # React + Vite + Three.js SPA
-    Dockerfile
-    eslint.config.js
-    src/{App.tsx, components/*.tsx, hooks/*.ts}
-  k8s/                    # Deployments, Services, Ingress (k8s resource names use
+  mocks/                  # all mock services live under one umbrella
+    robot_mock/           # Python gRPC mock Spot (folder *is* the Python package)
+      Dockerfile
+      pyproject.toml
+      __init__.py
+      server.py
+      state.py
+      servicers/
+      tests/              # mock_robot's own service-level tests
+    api_mock/             # Express/TS API
+      Dockerfile
+      eslint.config.js
+      src/{index.ts, routes/*.ts, grpc/client.ts}
+      helpers/            # python helpers: scrape_manifest.py, robot_mock_helpers/*
+    web_mock/             # React + Vite + Three.js SPA (Redux Toolkit)
+      Dockerfile
+      eslint.config.js
+      public/spot.glb     # (optional) Sketchfab Spot model dropped here
+      src/{App.tsx, components/*.tsx, store/*.ts}
+  vendor/
+    spot-sdk/             # pinned Boston Dynamics SDK submodule (read-only)
+  k8s/                    # Deployments, Services, Ingress (resource names use
                           #   hyphens — DNS-1123 forbids underscores)
   tests/
     playwright/           # end-to-end Playwright specs (smoke + mission_smoke)
@@ -96,18 +104,53 @@ The Ingress routes `/api/*` to `api-mock` and `/` to `web`. Set your DNS or
 - **robot_mock** speaks the full `bosdyn.api` surface clients need: `RobotId`,
   `Auth`, `Directory`, `TimeSync`, `EStop`, `Lease`, `Power`, `RobotCommand`,
   `RobotState`, `Image`, `DirectoryRegistration`. It listens insecure on 44444.
-- **api_mock** does three things: scrapes `robot-mock/robot_mock/tests/sdk/*.py` into a
-  manifest at startup (Python AST), exposes a `POST /api/tests/run` SSE endpoint
-  that shells out to `pytest … --mock`, and proxies `/api/robot/state` over gRPC.
+- **api_mock** does three things: scrapes `vendor/spot-sdk/python/**/tests/test_*.py`
+  into a manifest at startup (Python AST), exposes a `POST /api/tests/run` SSE
+  endpoint that shells out to `pytest … --mock`, and proxies `/api/robot/state`
+  over gRPC.
 - **web** renders the test list, a Three.js Spot avatar driven by
   `/api/robot/state`, and a streaming console pane.
 
+## Spot SDK as a submodule
+
+The upstream Spot SDK lives at `vendor/spot-sdk/` as a pinned git submodule
+(no test files are copied into this repo — the submodule is the single
+source of truth). After cloning:
+
+```bash
+git submodule update --init --recursive
+```
+
+A root-level `conftest.py` and `pytest.ini` route all upstream tests at the
+local `robot_mock` server when `--mock` is passed; without the flag, tests
+behave exactly as they do when run standalone inside the submodule.
+
+```bash
+# Run every upstream test against the mock
+pytest vendor/spot-sdk/python/bosdyn-client/tests/ \
+       vendor/spot-sdk/python/bosdyn-mission/tests/ -v --mock
+
+# Run a single upstream test
+pytest vendor/spot-sdk/python/bosdyn-mission/tests/test_client.py -v --mock
+
+# Confirm the submodule is at the expected pinned commit
+git submodule status
+```
+
 ## Adding a new SDK test
 
-1. Drop the test file into `robot-mock/robot_mock/tests/sdk/` and follow the upstream
-   pattern. (Or add a `test_*` function to an existing module.)
-2. Restart `api_mock` — the manifest is regenerated at container start.
-3. The new test appears in the web TestList automatically.
+Tests are not added in this repo — they belong upstream in
+`boston-dynamics/spot-sdk`. To pull in a new upstream version:
+
+```bash
+cd vendor/spot-sdk
+git fetch origin
+git checkout <new-tag-or-commit>
+cd ../..
+git add vendor/spot-sdk && git commit -m "bump spot-sdk to <ref>"
+```
+
+Restart `api_mock` afterwards so the manifest re-scrapes the new tests.
 
 ## Configuration
 
@@ -123,17 +166,18 @@ The Ingress routes `/api/*` to `api-mock` and `/` to `web`. Set your DNS or
 
 ```bash
 # Python service-level tests for the mock itself
-pytest robot-mock/robot_mock/tests/ --ignore=robot-mock/robot_mock/tests/sdk -v
+pytest robot_mock/tests/ -v
 
-# Upstream SDK suite routed through the in-process mock server
-pytest robot-mock/robot_mock/tests/sdk/ -v --mock
+# Upstream SDK suite, routed through robot_mock when --mock is passed
+pytest vendor/spot-sdk/python/bosdyn-client/tests/ \
+       vendor/spot-sdk/python/bosdyn-mission/tests/ -v --mock
 ```
 
-`--mock` is registered in `robot-mock/robot_mock/tests/sdk/conftest.py`; without it,
-upstream SDK tests behave exactly as they do upstream.
+`--mock` is registered in the root-level `conftest.py`; without it the
+upstream tests behave exactly as they do when run inside the submodule.
 
 ## Constraints respected
 
-- `robot-mock/robot_mock/tests/sdk/*.py` is a verbatim copy of upstream and is never
-  modified — only `conftest.py` is local to this project.
+- `vendor/spot-sdk/` is a read-only submodule — no file inside it is ever
+  modified. The root `conftest.py` + `pytest.ini` are the only shims.
 - `VITE_API_BASE` is the single GUI env var.

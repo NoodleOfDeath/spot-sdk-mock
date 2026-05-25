@@ -55,6 +55,9 @@ tests/playwright/.cache/
 # ---- Generated manifests ----
 **/.test_manifest.json
 
+# ---- Demo capture frames (the stitched gif is committed) ----
+assets/frames/
+
 # ---- Docker ----
 .docker/
 

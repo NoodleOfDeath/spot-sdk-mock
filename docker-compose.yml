@@ -1,14 +1,14 @@
 services:
   robot_mock:
     build:
-      context: ./robot_mock
+      context: ./mocks/robot_mock
     container_name: spot_robot_mock
     ports:
       - "44444:44444"
 
   api_mock:
     build:
-      context: ./api_mock
+      context: ./mocks/api_mock
     container_name: spot_api_mock
     ports:
       - "3001:3001"
@@ -16,15 +16,18 @@ services:
       ROBOT_MOCK_HOST: robot_mock
       ROBOT_MOCK_PORT: "44444"
       PORT: "3001"
+      PROJECT_ROOT: /app
     volumes:
-      # robot_mock is the Python package itself (flat layout) → mount it as /app/robot_mock
-      - ./robot_mock:/app/robot_mock:ro
+      - ./mocks/robot_mock:/app/robot_mock:ro
+      - ./vendor:/app/vendor:ro
+      - ./conftest.py:/app/conftest.py:ro
+      - ./pytest.ini:/app/pytest.ini:ro
     depends_on:
       - robot_mock
 
   web_mock:
     build:
-      context: ./web_mock
+      context: ./mocks/web_mock
       args:
         VITE_API_BASE: http://localhost:3001
     container_name: spot_web_mock

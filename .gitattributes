@@ -1,0 +1,6 @@
+# 3D model binaries are stored via Git LFS so they don't bloat the regular
+# repo history. Run `git lfs install` once per clone before committing
+# updated assets, then drop the new file in place — LFS will pick it up.
+*.glb  filter=lfs diff=lfs merge=lfs -text
+*.gltf filter=lfs diff=lfs merge=lfs -text
+*.bin  filter=lfs diff=lfs merge=lfs -text

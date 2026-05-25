@@ -1,0 +1,3 @@
+[submodule "vendor/spot-sdk"]
+	path = vendor/spot-sdk
+	url = https://github.com/boston-dynamics/spot-sdk
