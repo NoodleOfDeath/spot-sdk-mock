@@ -16,14 +16,18 @@ RUN pip3 install --no-cache-dir \
 WORKDIR /app
 
 # Copy api source + helpers
-COPY package.json tsconfig.json /app/
+COPY package.json tsconfig.json tsoa.json /app/
 RUN npm install --no-audit --no-fund
 
 COPY src /app/src
 COPY helpers /app/helpers
 ENV PYTHONPATH=/app/helpers
 
-RUN npx tsc -p tsconfig.json
+# Generate TSOA routes + OpenAPI spec, then compile TS.
+RUN npx tsoa spec-and-routes && npx tsc -p tsconfig.json
+
+# Ship the generated swagger.json into dist so the runtime can read it.
+RUN mkdir -p /app/dist/generated && cp /app/src/generated/swagger.json /app/dist/generated/
 
 # robot_mock source is mounted at /app/robot_mock by docker-compose
 ENV SDK_TESTS_DIR=/app/robot_mock/tests/sdk

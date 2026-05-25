@@ -5,6 +5,17 @@
 > Recorded with Playwright against the live local stack — `docker compose up` then
 > `cd tests/playwright && npx playwright test capture_demo.spec.ts && python ../../scripts/make_gif.py`.
 
+## API Reference
+
+![Swagger UI](assets/swagger.png)
+
+Interactive docs available at [http://localhost:3001/api/docs](http://localhost:3001/api/docs)
+when the stack is running. The OpenAPI 3 spec is served at
+`/api/docs/swagger.json` and generated from
+[`tsoa`-decorated controllers](mocks/api_mock/src/controllers/) at build time
+(SSE endpoints — which `tsoa` can't introspect — are merged in via
+`mocks/api_mock/src/swagger-patch.ts`).
+
 A three-tier sandbox that lets you exercise the upstream Spot SDK test suite
 in a browser, with no real robot required. Three services compose the stack:
 
@@ -54,6 +65,57 @@ spot-sdk-mock/
 > Kubernetes resource names use hyphens because DNS-1123 doesn't allow
 > underscores — that's a platform constraint, not a project style choice.
 
+## Prerequisites
+
+| Tool             | Used for                                              |
+|------------------|-------------------------------------------------------|
+| Python ≥ 3.10    | `robot_mock` server + pytest against `vendor/spot-sdk/` |
+| Node ≥ 20        | `api_mock`, `web_mock`, Playwright runner             |
+| Docker + Compose | Bringing the full stack up locally                    |
+| Git + Git LFS    | The repo; LFS for the Spot `.glb` model               |
+
+### One-time clone setup
+
+```bash
+git lfs install                              # once per machine
+git clone <repo-url> spot-sdk-mock
+cd spot-sdk-mock
+git submodule update --init --recursive      # pulls vendor/spot-sdk @ v5.1.4
+```
+
+### Python venv (robot_mock + upstream tests + helpers)
+
+The Python side ships a `pyproject.toml`; install it editable so `import
+robot_mock` resolves from anywhere in the repo (root `conftest.py`, the
+api container's helper scripts, etc.).
+
+```bash
+python3 -m venv mocks/robot_mock/.venv
+source mocks/robot_mock/.venv/bin/activate
+pip install -e mocks/robot_mock pytest python-pptx pillow
+```
+
+Confirm it works:
+
+```bash
+python -c "import robot_mock; print(robot_mock.__file__)"
+pytest mocks/robot_mock/tests/ -v                      # robot_mock unit tests
+pytest vendor/spot-sdk/python/bosdyn-client/tests/ \
+       vendor/spot-sdk/python/bosdyn-mission/tests/ -v --mock
+```
+
+`--mock` is registered by the root-level `conftest.py`; without it, the
+vendor tests behave exactly as they do when run standalone inside the
+submodule.
+
+### Node deps
+
+```bash
+( cd mocks/api_mock && npm install )
+( cd mocks/web_mock && npm install )
+( cd tests/playwright && npm install && npx playwright install chromium )
+```
+
 ## Run locally (docker compose)
 
 ```bash
@@ -69,17 +131,16 @@ Once up:
 ## Smoke test
 
 ```bash
-cd playwright
-npm install
-npx playwright install chromium
-npx playwright test smoke.spec.ts
+cd tests/playwright
+npx playwright test                          # smoke + mission_smoke + gui_smoke
 ```
 
-The smoke spec asserts:
-1. Page title contains "Spot Mock"
-2. At least one SDK test card renders
-3. The Three.js robot canvas mounts
-4. Clicking ▶ Run streams console output within 30 s
+Specs in `tests/playwright/`:
+- `smoke.spec.ts` — page title, test cards render, ▶ Run streams output, Three.js canvas mounts.
+- `mission_smoke.spec.ts` — mission test runs, Play/Pause toggles `mission_state`, Walk-tab `rAF` is live.
+- `gui_smoke.spec.ts` — Run All Tests button streams output, point light is present on the RobotViewer.
+- `capture_demo.spec.ts` — choreographed walkthrough that writes screenshots into `assets/frames/`
+  (used by `scripts/make_gif.py` to refresh `assets/demo.gif`).
 
 ## Deploy to Kubernetes
 

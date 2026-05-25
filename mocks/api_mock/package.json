@@ -2,25 +2,29 @@
   "name": "api_mock",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "tsoa": "tsoa spec-and-routes",
+    "build": "npm run tsoa && tsc -p tsconfig.json",
     "start": "node dist/index.js",
-    "dev": "tsx src/index.ts",
-    "typecheck": "tsc --noEmit",
+    "dev": "npm run tsoa && tsx src/index.ts",
+    "typecheck": "npm run tsoa && tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },
   "dependencies": {
     "express": "4.21.1",
-    "cors": "2.8.5"
+    "cors": "2.8.5",
+    "tsoa": "6.6.0",
+    "swagger-ui-express": "5.0.1",
+    "reflect-metadata": "0.2.2"
   },
   "devDependencies": {
     "typescript": "5.6.3",
     "tsx": "4.19.2",
-    "@types/express": "5.0.0",
+    "@types/express": "4.17.21",
     "@types/cors": "2.8.17",
     "@types/node": "22.9.0",
+    "@types/swagger-ui-express": "4.1.7",
     "eslint": "9.14.0",
     "typescript-eslint": "8.13.0",
     "@eslint/js": "9.14.0"
