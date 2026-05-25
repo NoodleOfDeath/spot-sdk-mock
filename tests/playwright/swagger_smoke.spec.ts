@@ -29,7 +29,11 @@ test("Swagger UI lists routes + screenshot", async ({ page, request }) => {
   const count = await opBlocks.count();
   expect(count).toBeGreaterThanOrEqual(5);
 
-  // Expand every operation so the screenshot shows their schemas.
+  // Capture the README screenshot with all operations collapsed.
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: SCREENSHOT_PATH, fullPage: true });
+
+  // Then expand every operation and assert the first GET's schema renders.
   for (let i = 0; i < count; i++) {
     const block = opBlocks.nth(i);
     const summary = block.locator(".opblock-summary").first();
@@ -38,15 +42,9 @@ test("Swagger UI lists routes + screenshot", async ({ page, request }) => {
     }
   }
 
-  // Click the first GET endpoint and assert the response schema is visible.
   const firstGet = page.locator(".opblock.opblock-get").first();
   await expect(firstGet).toBeVisible();
   await expect(firstGet.locator(".responses-wrapper")).toBeVisible({
     timeout: 5_000,
   });
-
-  // Give swagger-ui a tick to settle its expand animations.
-  await page.waitForTimeout(400);
-
-  await page.screenshot({ path: SCREENSHOT_PATH, fullPage: true });
 });
