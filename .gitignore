@@ -47,10 +47,10 @@ out/
 vite.config.*.timestamp-*
 
 # ---- Playwright ----
-playwright/test-results/
-playwright/playwright-report/
-playwright/blob-report/
-playwright/.cache/
+tests/playwright/test-results/
+tests/playwright/playwright-report/
+tests/playwright/blob-report/
+tests/playwright/.cache/
 
 # ---- Generated manifests ----
 **/.test_manifest.json

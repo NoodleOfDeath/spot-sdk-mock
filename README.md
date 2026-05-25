@@ -5,9 +5,9 @@ in a browser, with no real robot required. Three services compose the stack:
 
 | Service     | Folder         | Port  | Tech                    |
 |-------------|----------------|-------|-------------------------|
-| robot-mock  | `robot-mock/`  | 44444 | Python · gRPC           |
-| api-mock    | `api-mock/`    | 3001  | TypeScript · Express    |
-| web-mock    | `web-mock/`    | 4000  | React · Vite · Three.js |
+| robot_mock  | `robot_mock/`  | 44444 | Python · gRPC           |
+| api_mock    | `api_mock/`    | 3001  | TypeScript · Express    |
+| web_mock    | `web_mock/`    | 4000  | React · Vite · Three.js |
 
 ## Layout
 
@@ -16,29 +16,35 @@ spot-sdk-mock/
   docker-compose.yml
   README.md
   .gitignore
-  robot-mock/             # Python gRPC mock Spot
+  robot_mock/             # Python gRPC mock Spot — folder *is* the Python package (flat layout)
     Dockerfile
-    robot_mock/           # Python package (hyphens not allowed in module names)
-      server.py
-      servicers/
-      tests/
-        sdk/              # verbatim upstream bosdyn-client tests (DO NOT EDIT)
-  api-mock/               # Express/TS API
+    pyproject.toml
+    __init__.py
+    server.py
+    state.py
+    servicers/
+    tests/
+      conftest.py
+      sdk/                # verbatim upstream bosdyn-client tests (DO NOT EDIT)
+        mission/          # bosdyn-mission upstream tests
+  api_mock/               # Express/TS API
     Dockerfile
     eslint.config.js
     src/{index.ts, routes/*.ts, grpc/client.ts}
     helpers/              # python helpers: scrape_manifest.py, robot_mock_helpers/get_state.py
-  web-mock/               # React + Vite + Three.js SPA
+  web_mock/               # React + Vite + Three.js SPA
     Dockerfile
     eslint.config.js
     src/{App.tsx, components/*.tsx, hooks/*.ts}
-  k8s/                    # Deployments, Services, Ingress
-  playwright/             # smoke.spec.ts end-to-end test
+  k8s/                    # Deployments, Services, Ingress (k8s resource names use
+                          #   hyphens — DNS-1123 forbids underscores)
+  tests/
+    playwright/           # end-to-end Playwright specs (smoke + mission_smoke)
 ```
 
-> The top-level folders use hyphens (Docker / k8s convention).
-> Inside `robot-mock/`, the actual Python package keeps the underscore name
-> `robot_mock/` because Python module names can't contain hyphens.
+> Folder + Docker service + npm package names are **all snake_case**.
+> Kubernetes resource names use hyphens because DNS-1123 doesn't allow
+> underscores — that's a platform constraint, not a project style choice.
 
 ## Run locally (docker compose)
 
