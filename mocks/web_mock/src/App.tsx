@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { TestList } from "./components/TestList.js";
 import { ConsoleOutput } from "./components/ConsoleOutput.js";
 import { RobotViewer } from "./components/RobotViewer.js";
-import { WalkAnimation } from "./components/WalkAnimation.js";
+import { StateLegend } from "./components/StateLegend.js";
+import { HeaderLinks } from "./components/HeaderLinks.js";
 import { MissionPanel } from "./components/MissionPanel.js";
 import { Splitter } from "./components/Splitter.js";
 import { thunks, useAppDispatch, useAppSelector } from "./store/index.js";
-import { setTab } from "./store/uiSlice.js";
 
 const STORAGE_KEY = "spot-mock:panel-sizes:v1";
 
@@ -38,7 +38,6 @@ function saveSizes(s: Sizes) {
 
 export function App() {
   const dispatch = useAppDispatch();
-  const tab = useAppSelector((s) => s.ui.tab);
   const activeTestId = useAppSelector((s) => s.ui.activeTestId);
   const tests = useAppSelector((s) => s.tests.items);
   const [sizes, setSizes] = useState<Sizes>(() => loadSizes());
@@ -48,7 +47,7 @@ export function App() {
   useEffect(() => {
     dispatch(thunks.loadTests());
     dispatch(thunks.pollRobot());
-    const robotPoll = setInterval(() => dispatch(thunks.pollRobot()), 2000);
+    const robotPoll = setInterval(() => dispatch(thunks.pollRobot()), 500);
     return () => clearInterval(robotPoll);
   }, [dispatch]);
 
@@ -64,6 +63,7 @@ export function App() {
       <header>
         <h1>Spot Mock — SDK Test Console</h1>
         <span className="badge">stack: robot_mock + api_mock + web_mock</span>
+        <HeaderLinks />
       </header>
       <main
         className="resizable"
@@ -71,10 +71,9 @@ export function App() {
       >
         <div className="col">
           <div
-            className="panel"
+            className="panel test-list-panel"
             style={{ flex: 1, display: "flex", flexDirection: "column" }}
           >
-            <h2>SDK Tests</h2>
             <TestList />
           </div>
         </div>
@@ -95,32 +94,15 @@ export function App() {
             minHeight: 0,
           }}
         >
-          <div className="panel" style={{ minHeight: 0 }}>
-            <div className="tabs" data-testid="viewer-tabs">
-              <button
-                type="button"
-                className={tab === "state" ? "tab active" : "tab"}
-                data-testid="tab-state"
-                onClick={() => dispatch(setTab("state"))}
-              >
-                State
-              </button>
-              <button
-                type="button"
-                className={tab === "walk" ? "tab active" : "tab"}
-                data-testid="tab-walk"
-                onClick={() => dispatch(setTab("walk"))}
-              >
-                Walk
-              </button>
-            </div>
+          <div className="panel viewer-panel" style={{ minHeight: 0 }}>
             <div
               className="viewer"
               data-testid="viewer-container"
-              style={{ height: `calc(${sizes.viewer}px - 70px)` }}
+              style={{ height: `calc(${sizes.viewer}px - 200px)` }}
             >
-              {tab === "state" ? <RobotViewer /> : <WalkAnimation />}
+              <RobotViewer />
             </div>
+            <StateLegend />
           </div>
           <Splitter
             direction="horizontal"

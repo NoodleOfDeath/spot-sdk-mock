@@ -9,6 +9,13 @@ export type TestEntry = {
   suite: string;
 };
 
+export type TestManifest = {
+  local: TestEntry[];
+  vendor: TestEntry[];
+};
+
+export type TestSource = "local" | "vendor";
+
 export type BodyPoseSE2 = {
   x: number;
   y: number;
@@ -39,10 +46,18 @@ export type MissionState = {
   questions: MissionQuestion[];
 };
 
-export async function fetchTests(): Promise<TestEntry[]> {
+export async function fetchTests(): Promise<TestManifest> {
   const res = await fetch(`${API_BASE}/api/tests`);
   if (!res.ok) throw new Error(`tests: ${res.status}`);
-  return res.json();
+  const parsed = await res.json();
+  if (Array.isArray(parsed)) {
+    // Tolerate the legacy flat-array shape — treat as vendor-only.
+    return { local: [], vendor: parsed as TestEntry[] };
+  }
+  return {
+    local: Array.isArray(parsed?.local) ? parsed.local : [],
+    vendor: Array.isArray(parsed?.vendor) ? parsed.vendor : [],
+  };
 }
 
 export async function fetchRobotState(): Promise<RobotState | null> {

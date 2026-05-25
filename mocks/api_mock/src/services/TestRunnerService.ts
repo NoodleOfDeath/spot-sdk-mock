@@ -1,20 +1,40 @@
 import { spawn, ChildProcess } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import type { Request, Response } from "express";
-import type { TestEntry } from "../models/TestManifest";
+import type { TestEntry, TestManifest } from "../models/TestManifest";
 
 const PROJECT_ROOT = process.env.PROJECT_ROOT ?? "/app";
 const MANIFEST_PATH =
   process.env.MANIFEST_PATH ?? "/app/.test_manifest.json";
 
+export const LOCAL_PYTEST_PATHS = ["robot_mock/tests/"];
+export const VENDOR_PYTEST_PATHS = [
+  "vendor/spot-sdk/python/bosdyn-client/tests/",
+  "vendor/spot-sdk/python/bosdyn-mission/tests/",
+];
+
 export class TestRunnerService {
-  static loadManifest(): TestEntry[] {
-    if (!existsSync(MANIFEST_PATH)) return [];
+  static loadManifest(): TestManifest {
+    const empty: TestManifest = { local: [], vendor: [] };
+    if (!existsSync(MANIFEST_PATH)) return empty;
     try {
-      return JSON.parse(readFileSync(MANIFEST_PATH, "utf-8"));
+      const parsed = JSON.parse(readFileSync(MANIFEST_PATH, "utf-8"));
+      if (Array.isArray(parsed)) {
+        // Legacy flat-array manifest — treat as vendor-only.
+        return { local: [], vendor: parsed as TestEntry[] };
+      }
+      return {
+        local: Array.isArray(parsed.local) ? parsed.local : [],
+        vendor: Array.isArray(parsed.vendor) ? parsed.vendor : [],
+      };
     } catch {
-      return [];
+      return empty;
     }
+  }
+
+  static flatManifest(): TestEntry[] {
+    const m = TestRunnerService.loadManifest();
+    return [...m.local, ...m.vendor];
   }
 
   static streamPytest(

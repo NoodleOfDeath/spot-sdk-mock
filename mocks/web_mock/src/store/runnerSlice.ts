@@ -84,13 +84,20 @@ const runTest = createAsyncThunk<void, string>(
   }
 );
 
-const runAll = createAsyncThunk<void>(
+export type RunAllArgs = {
+  source?: "local" | "vendor" | null;
+  filter?: string | null;
+};
+
+const runAll = createAsyncThunk<void, RunAllArgs | undefined>(
   "runner/runAll",
-  async (_, { dispatch }) => {
+  async (args, { dispatch }) => {
     if (currentAbort) currentAbort.abort();
     const ac = new AbortController();
     currentAbort = ac;
-    dispatch(slice.actions._start("__all__"));
+    const tag =
+      args?.source ? `__all_${args.source}__` : "__all__";
+    dispatch(slice.actions._start(tag));
     try {
       await streamSSE(
         `${API_BASE}/api/tests/run-all`,
@@ -100,6 +107,10 @@ const runAll = createAsyncThunk<void>(
             "content-type": "application/json",
             accept: "text/event-stream",
           },
+          body: JSON.stringify({
+            source: args?.source ?? null,
+            filter: args?.filter ?? null,
+          }),
           signal: ac.signal,
         },
         dispatch as Dispatch

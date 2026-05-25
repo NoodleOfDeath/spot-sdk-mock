@@ -30,3 +30,22 @@ export interface RunTestExitEvent {
   /** Process exit code, or ``-1`` if the runner was killed. */
   exit_code: number;
 }
+
+/** Tests grouped by source for the two-panel UI. */
+export interface TestManifest {
+  /** Tests under ``mocks/robot_mock/tests/``. */
+  local: TestEntry[];
+  /** Tests under ``vendor/spot-sdk/python/.../tests/``. */
+  vendor: TestEntry[];
+}
+
+/**
+ * Body for ``POST /api/tests/run-all`` — scopes pytest to one section and
+ * optionally narrows by a ``-k`` filter string.
+ */
+export interface RunAllRequest {
+  /** ``local`` for robot_mock tests, ``vendor`` for upstream SDK tests; null/omitted runs both. */
+  source?: "local" | "vendor" | null;
+  /** Optional ``pytest -k`` filter expression. */
+  filter?: string | null;
+}

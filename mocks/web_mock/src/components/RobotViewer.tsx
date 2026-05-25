@@ -2,7 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
-import { useAppSelector } from "../store/index.js";
+import {
+  fetchRobotState,
+  postWalkCommand,
+  type RobotState,
+} from "../api.js";
 import {
   buildPlaceholder,
   loadSpotModel,
@@ -13,12 +17,66 @@ const BD_BLUE = new THREE.Color("#0057B8");
 const GRAY = new THREE.Color("#3a3f46");
 const RED = new THREE.Color("#f85149");
 
+const SPOT_LENGTH_M = 0.7;
+const HIP_AMPLITUDE = THREE.MathUtils.degToRad(25);
+const GAIT_HZ = 2;
+
+declare global {
+  interface Window {
+    __spotX?: number;
+    __spotScale?: number;
+  }
+}
+
 export function RobotViewer() {
   const mountRef = useRef<HTMLDivElement>(null);
-  const state = useAppSelector((s) => s.robot.current);
-  const stateRef = useRef(state);
-  stateRef.current = state;
+  // The viewer polls its own state at a fast rate so the model translates
+  // smoothly while a walk is in flight. We bypass redux to avoid hammering
+  // it with re-renders.
+  const stateRef = useRef<RobotState | null>(null);
+  const resetCameraRef = useRef<(() => void) | null>(null);
+  const [walking, setWalking] = useState(false);
   const [showOverlay, setShowOverlay] = useState(true);
+
+  useEffect(() => {
+    let cancel = false;
+    const tick = async () => {
+      if (cancel) return;
+      const next = await fetchRobotState();
+      if (!cancel && next) {
+        stateRef.current = next;
+        setWalking(next.locomotion_target_m != null);
+      }
+    };
+    tick();
+    const id = setInterval(tick, 150);
+    return () => {
+      cancel = true;
+      clearInterval(id);
+    };
+  }, []);
+
+  const replay = async () => {
+    if (walking) return;
+    setWalking(true);
+    try {
+      await postWalkCommand(5.0);
+    } catch {
+      setWalking(false);
+    }
+  };
+
+  const resetPosition = async () => {
+    if (walking) return;
+    const currentX = stateRef.current?.body_pose_se2?.x ?? 0;
+    if (Math.abs(currentX) < 1e-3) return;
+    setWalking(true);
+    try {
+      await postWalkCommand(-currentX);
+    } catch {
+      setWalking(false);
+    }
+  };
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -33,7 +91,8 @@ export function RobotViewer() {
       0.1,
       100
     );
-    camera.position.set(2.5, 1.6, 3.5);
+    const CAM_OFFSET = new THREE.Vector3(2.6, 1.6, 3.5);
+    camera.position.copy(CAM_OFFSET);
     camera.lookAt(0, 0.4, 0);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -44,10 +103,6 @@ export function RobotViewer() {
     renderer.toneMappingExposure = 1.4;
     mount.appendChild(renderer.domElement);
 
-    // PBR materials in the GLB need an environment map to look like anything
-    // other than flat-dark. RoomEnvironment is a cheap built-in approximation
-    // of a softbox/HDR — it's what makes the model legible even at low
-    // light intensities.
     const pmrem = new THREE.PMREMGenerator(renderer);
     scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
@@ -64,7 +119,7 @@ export function RobotViewer() {
       TWO: THREE.TOUCH.DOLLY_PAN,
     };
 
-    scene.add(new THREE.GridHelper(6, 12, 0x30363d, 0x161b22));
+    scene.add(new THREE.GridHelper(20, 40, 0x30363d, 0x161b22));
     scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.1));
     const key = new THREE.DirectionalLight(0xffffff, 0.6);
     key.position.set(3, 4, 2);
@@ -79,13 +134,34 @@ export function RobotViewer() {
     let rig: SpotRig = buildPlaceholder();
     scene.add(rig.root);
 
+    resetCameraRef.current = () => {
+      const x = rig.root.position.x;
+      controls.target.set(x, 0.4, 0);
+      camera.position.set(x + CAM_OFFSET.x, CAM_OFFSET.y, CAM_OFFSET.z);
+      controls.update();
+    };
+
+    let unitsPerMeter = 1.0;
+    window.__spotScale = unitsPerMeter;
+    window.__spotX = rig.root.position.x;
+    const groundY = rig.root.position.y;
+
     let cancelled = false;
     loadSpotModel().then((real) => {
       if (cancelled || !real) return;
       scene.remove(rig.root);
       rig = real;
+      // Rotate so the body's long axis aligns with +X, the direction of
+      // motion for a straight walk.
+      rig.root.rotation.y = -Math.PI / 2;
       scene.add(rig.root);
       setShowOverlay(false);
+      const bbox = new THREE.Box3().setFromObject(real.root);
+      const size = new THREE.Vector3();
+      bbox.getSize(size);
+      const modelLen = Math.max(size.x, size.z);
+      unitsPerMeter = modelLen > 0 ? modelLen / SPOT_LENGTH_M : 1.0;
+      window.__spotScale = unitsPerMeter;
     });
 
     const setStance = (raised: boolean) => {
@@ -104,18 +180,57 @@ export function RobotViewer() {
         !!s && (s.power_state === "ON" || s.stand_state === "standing");
       setStance(standing);
 
+      // Always translate from body_pose_se2.x — this works both during a
+      // walk and once the body has come to rest at a non-zero pose.
+      const bx = s?.body_pose_se2?.x ?? 0;
+      const targetX = bx * unitsPerMeter;
+      rig.root.position.x = targetX;
+      rig.root.position.y = groundY;
+      rig.root.position.z = 0;
+      window.__spotX = rig.root.position.x;
+
+      const isWalking =
+        s?.locomotion_target_m != null && s.locomotion_target_m > 0;
+
+      // Leg gait only animates while locomotion is in flight; otherwise
+      // legs freeze (placeholder rig only — the real GLB has no per-leg
+      // controls).
+      if (rig.isPlaceholder && rig.hips.length === 4) {
+        if (isWalking) {
+          const phase = Math.sin(2 * Math.PI * GAIT_HZ * t);
+          const pairA = [rig.hips[0], rig.hips[3]];
+          const pairB = [rig.hips[1], rig.hips[2]];
+          for (const hip of pairA) hip.rotation.z = phase * HIP_AMPLITUDE;
+          for (const hip of pairB) hip.rotation.z = -phase * HIP_AMPLITUDE;
+        } else {
+          for (const hip of rig.hips) hip.rotation.z = 0;
+        }
+      }
+
       const bodyMat = rig.body.material as THREE.MeshStandardMaterial;
       if (s?.estop_cut) {
         const flash = Math.sin(t * 8) > 0;
         bodyMat.color.copy(flash ? RED : BD_BLUE);
-      } else if (standing) {
+      } else if (isWalking || standing) {
         bodyMat.color.copy(BD_BLUE);
-        if (rig.isPlaceholder) rig.body.rotation.z = Math.sin(t * 1.8) * 0.02;
+        if (rig.isPlaceholder && !isWalking) {
+          rig.body.rotation.z = Math.sin(t * 1.8) * 0.02;
+        }
       } else {
         bodyMat.color.copy(GRAY);
         if (rig.isPlaceholder) rig.body.rotation.z = 0;
       }
 
+      // Camera follows the body while a walk is in flight; otherwise it
+      // sits at the fixed initial offset.
+      if (isWalking) {
+        controls.target.set(targetX, 0.4, 0);
+        camera.position.set(
+          targetX + CAM_OFFSET.x,
+          CAM_OFFSET.y,
+          CAM_OFFSET.z
+        );
+      }
       controls.update();
       renderer.render(scene, camera);
       raf = requestAnimationFrame(animate);
@@ -143,8 +258,13 @@ export function RobotViewer() {
       pmrem.dispose();
       renderer.dispose();
       mount.removeChild(renderer.domElement);
+      resetCameraRef.current = null;
+      window.__spotX = undefined;
+      window.__spotScale = undefined;
     };
   }, []);
+
+  const resetCamera = () => resetCameraRef.current?.();
 
   return (
     <div
@@ -153,44 +273,54 @@ export function RobotViewer() {
       className="three-mount"
       style={{ position: "relative", width: "100%", height: "100%" }}
     >
-      {showOverlay && <PlaceholderOverlay variant="state" />}
+      <div className="walk-controls">
+        <button
+          type="button"
+          data-testid="walk-replay"
+          className="walk-btn walk-btn-primary"
+          onClick={replay}
+          disabled={walking}
+        >
+          {walking ? "Walking…" : "Replay walk 5 m"}
+        </button>
+        <button
+          type="button"
+          data-testid="walk-reset"
+          className="walk-btn"
+          onClick={resetPosition}
+          disabled={walking}
+        >
+          Return to Dock
+        </button>
+        <button
+          type="button"
+          data-testid="camera-reset"
+          className="walk-btn"
+          onClick={resetCamera}
+        >
+          Reset Camera
+        </button>
+      </div>
+      {showOverlay && <PlaceholderOverlay />}
     </div>
   );
 }
 
-export function PlaceholderOverlay({
-  variant,
-}: {
-  variant: "state" | "walk";
-}) {
+export function PlaceholderOverlay() {
   return (
     <div className="model-overlay" data-testid="placeholder-overlay">
-      <strong>
-        {variant === "walk" ? "POC walk — ground-plane only" : "Placeholder model"}
-      </strong>
+      <strong>Placeholder model</strong>
       <span>
-        {variant === "walk" ? (
-          <>
-            Body translates along the ground via{" "}
-            <code>body_pose_se2.x</code> — legs do not move. To make it
-            actually walk, drag-and-drop an animated <code>.glb</code> with
-            a gait <code>AnimationClip</code> in place of{" "}
-            <code>mocks/web_mock/public/spot.glb</code>.
-          </>
-        ) : (
-          <>
-            Box + cylinders stand-in — drop a real .glb at{" "}
-            <code>mocks/web_mock/public/spot.glb</code> to replace it.{" "}
-            <a
-              href="https://sketchfab.com/3d-models/boston-dynamics-robot-spot-71354fd599e34db898a7d083851b792a"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Sketchfab source
-            </a>
-            .
-          </>
-        )}
+        Box + cylinders stand-in — drop a real .glb at{" "}
+        <code>mocks/web_mock/public/spot.glb</code> to replace it.{" "}
+        <a
+          href="https://sketchfab.com/3d-models/boston-dynamics-robot-spot-71354fd599e34db898a7d083851b792a"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Sketchfab source
+        </a>
+        .
       </span>
       <span className="hint">
         Click + drag (or one-finger touch) to orbit · two-finger pinch to zoom.

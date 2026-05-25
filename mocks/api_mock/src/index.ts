@@ -6,7 +6,11 @@ import cors from "cors";
 import swaggerUi from "swagger-ui-express";
 
 import { RegisterRoutes } from "./generated/routes";
-import { TestRunnerService } from "./services/TestRunnerService";
+import {
+  LOCAL_PYTEST_PATHS,
+  TestRunnerService,
+  VENDOR_PYTEST_PATHS,
+} from "./services/TestRunnerService";
 import { patchSseRoutes } from "./swagger-patch";
 
 const app = express();
@@ -24,8 +28,7 @@ app.use("/api", apiRouter);
 // -- Raw SSE routes for streaming pytest output. ----------------------------
 app.post("/api/tests/run", (req: Request, res: Response) => {
   const testId: string | undefined = req.body?.test;
-  const manifest = TestRunnerService.loadManifest();
-  const entry = manifest.find((t) => t.id === testId);
+  const entry = TestRunnerService.flatManifest().find((t) => t.id === testId);
   if (!entry) {
     res.status(404).json({ error: `unknown test: ${testId}` });
     return;
@@ -39,17 +42,21 @@ app.post("/api/tests/run", (req: Request, res: Response) => {
 });
 
 app.post("/api/tests/run-all", (req: Request, res: Response) => {
-  const targets = [
-    "robot_mock/tests/",
-    "vendor/spot-sdk/python/bosdyn-client/tests/",
-    "vendor/spot-sdk/python/bosdyn-mission/tests/",
-  ];
-  TestRunnerService.streamPytest(
-    req,
-    res,
-    targets,
-    `>> pytest ${targets.join(" ")} -v -s --mock`
-  );
+  const source = req.body?.source as "local" | "vendor" | null | undefined;
+  const filter = (req.body?.filter as string | null | undefined) || null;
+  let targets: string[];
+  if (source === "local") {
+    targets = [...LOCAL_PYTEST_PATHS];
+  } else if (source === "vendor") {
+    targets = [...VENDOR_PYTEST_PATHS];
+  } else {
+    targets = [...LOCAL_PYTEST_PATHS, ...VENDOR_PYTEST_PATHS];
+  }
+  const args = filter ? [...targets, "-k", filter] : [...targets];
+  const preamble =
+    `>> pytest ${args.join(" ")} -v -s --mock` +
+    (source ? ` (source=${source})` : "");
+  TestRunnerService.streamPytest(req, res, args, preamble);
 });
 
 // -- Swagger UI + raw spec ---------------------------------------------------

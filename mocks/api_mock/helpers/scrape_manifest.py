@@ -11,9 +11,12 @@ from pathlib import Path
 
 
 # Default search roots (mounted by docker-compose); can be overridden via env.
-DEFAULT_ROOTS = [
+VENDOR_ROOTS = [
     "/app/vendor/spot-sdk/python/bosdyn-client/tests",
     "/app/vendor/spot-sdk/python/bosdyn-mission/tests",
+]
+LOCAL_ROOTS = [
+    "/app/robot_mock/tests",
 ]
 
 
@@ -36,7 +39,7 @@ def _suite_for(rel_path: Path) -> str:
     return "client"
 
 
-def collect(roots):
+def collect(roots, default_suite: str = "client"):
     entries = []
     for root in roots:
         root_path = Path(root)
@@ -50,7 +53,10 @@ def collect(roots):
                 continue
             abs_file = str(py)
             rel = py.relative_to(root_path)
-            suite = _suite_for(py.relative_to(Path("/app/vendor/spot-sdk")) if "/app/vendor/spot-sdk" in abs_file else rel)
+            if "/app/vendor/spot-sdk" in abs_file:
+                suite = _suite_for(py.relative_to(Path("/app/vendor/spot-sdk")))
+            else:
+                suite = default_suite
             for node in ast.walk(tree):
                 if isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
                     entries.append(
@@ -84,17 +90,23 @@ def collect(roots):
 def main() -> int:
     roots_env = os.environ.get("SDK_TEST_ROOTS")
     if roots_env:
-        roots = [r.strip() for r in roots_env.split(":") if r.strip()]
+        vendor_roots = [r.strip() for r in roots_env.split(":") if r.strip()]
     else:
-        roots = DEFAULT_ROOTS
+        vendor_roots = VENDOR_ROOTS
+    local_roots_env = os.environ.get("LOCAL_TEST_ROOTS")
+    if local_roots_env:
+        local_roots = [r.strip() for r in local_roots_env.split(":") if r.strip()]
+    else:
+        local_roots = LOCAL_ROOTS
     out_path = Path(
         os.environ.get("MANIFEST_PATH", "/app/.test_manifest.json")
     )
-    entries = collect(roots)
-    out_path.write_text(json.dumps(entries, indent=2))
-    suites = sorted({e["suite"] for e in entries})
+    local = collect(local_roots, default_suite="local")
+    vendor = collect(vendor_roots)
+    manifest = {"local": local, "vendor": vendor}
+    out_path.write_text(json.dumps(manifest, indent=2))
     print(
-        f"wrote {len(entries)} entries (suites: {', '.join(suites)}) to {out_path}"
+        f"wrote {len(local)} local + {len(vendor)} vendor entries to {out_path}"
     )
     return 0
 

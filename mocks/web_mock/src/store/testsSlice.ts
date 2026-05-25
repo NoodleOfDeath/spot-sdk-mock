@@ -1,15 +1,26 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
-import { fetchTests, type TestEntry } from "../api.js";
+import { fetchTests, type TestEntry, type TestManifest } from "../api.js";
 
 type TestsState = {
+  /** Flattened ``local + vendor`` list (preserved for legacy consumers). */
   items: TestEntry[];
+  local: TestEntry[];
+  vendor: TestEntry[];
   loading: boolean;
   error: string | null;
 };
 
-const initialState: TestsState = { items: [], loading: false, error: null };
+const initialState: TestsState = {
+  items: [],
+  local: [],
+  vendor: [],
+  loading: false,
+  error: null,
+};
 
-const loadTests = createAsyncThunk("tests/load", async () => fetchTests());
+const loadTests = createAsyncThunk<TestManifest>("tests/load", async () =>
+  fetchTests()
+);
 
 const slice = createSlice({
   name: "tests",
@@ -22,7 +33,9 @@ const slice = createSlice({
     });
     b.addCase(loadTests.fulfilled, (s, a) => {
       s.loading = false;
-      s.items = a.payload;
+      s.local = a.payload.local;
+      s.vendor = a.payload.vendor;
+      s.items = [...a.payload.local, ...a.payload.vendor];
     });
     b.addCase(loadTests.rejected, (s, a) => {
       s.loading = false;
