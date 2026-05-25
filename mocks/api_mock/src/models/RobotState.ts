@@ -1,4 +1,14 @@
 /**
+ * SE2 ground-plane body pose: ``x``/``y`` in metres, ``heading`` in radians
+ * about the world Z axis.
+ */
+export interface BodyPoseSE2 {
+  x: number;
+  y: number;
+  heading: number;
+}
+
+/**
  * Snapshot of mock-robot state returned by ``GET /api/robot/state``.
  *
  * @example {
@@ -6,7 +16,11 @@
  *   "estop_cut": false,
  *   "stand_state": "sitting",
  *   "battery_pct": 80,
- *   "mission_state": "IDLE"
+ *   "mission_state": "IDLE",
+ *   "body_pose_se2": { "x": 0, "y": 0, "heading": 0 },
+ *   "locomotion_target_m": null,
+ *   "locomotion_elapsed_ms": 0,
+ *   "gait_cycles": 0
  * }
  */
 export interface RobotStateSummary {
@@ -20,4 +34,32 @@ export interface RobotStateSummary {
   battery_pct: number;
   /** Mission lifecycle: ``IDLE`` / ``PLAYING`` / ``PAUSED``. */
   mission_state: "IDLE" | "PLAYING" | "PAUSED";
+  /** SE2 ground-plane pose of the body in the odom frame. */
+  body_pose_se2: BodyPoseSE2;
+  /** Distance remaining to walk in metres, or ``null`` if not walking. */
+  locomotion_target_m: number | null;
+  /** Milliseconds since the current walk began (0 if no walk has been issued). */
+  locomotion_elapsed_ms: number;
+  /** Trot cycles completed during the current walk (2 Hz). */
+  gait_cycles: number;
+}
+
+/**
+ * Payload for ``POST /api/robot/command`` — kicks off a straight-line walk.
+ *
+ * @example { "type": "walk", "distance_m": 5.0 }
+ */
+export interface WalkCommandRequest {
+  /** Always ``"walk"`` for now. */
+  type: "walk";
+  /** Distance to walk forward along +X, in metres. */
+  distance_m: number;
+}
+
+/**
+ * Response from ``POST /api/robot/command``.
+ */
+export interface WalkCommandResult {
+  command_id: number;
+  status: string;
 }

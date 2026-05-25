@@ -85,6 +85,15 @@ def mock_server(grpc_server):
 def reset_state():
     """Reset shared mutable state between tests to keep them isolated."""
     with ROBOT_STATE.lock:
+        if ROBOT_STATE._locomotion_stop is not None:
+            ROBOT_STATE._locomotion_stop.set()
+            ROBOT_STATE._locomotion_stop = None
+        ROBOT_STATE.locomotion_target_m = None
+        ROBOT_STATE.locomotion_start_time_ns = None
+        ROBOT_STATE.gait_cycles = 0
+        ROBOT_STATE.body_pose_se2.x = 0.0
+        ROBOT_STATE.body_pose_se2.y = 0.0
+        ROBOT_STATE.body_pose_se2.heading = 0.0
         ROBOT_STATE.motor_power_state = ROBOT_STATE.MOTOR_OFF
         ROBOT_STATE._power_transition_target = None
         ROBOT_STATE.estop_endpoints.clear()

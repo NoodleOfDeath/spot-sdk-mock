@@ -41,6 +41,24 @@ def main() -> int:
     elif motor_name == "MOTOR_POWER_STATE_OFF":
         stand_state = "sitting"
 
+    # Fetch metrics for locomotion fields.
+    metrics_resp = rs_stub.GetRobotMetrics(
+        robot_state_pb2.RobotMetricsRequest(), timeout=4.0
+    )
+    metric_map = {p.label: p.float_value for p in metrics_resp.robot_metrics.metrics}
+    body_pose = {
+        "x": round(metric_map.get("body_pose_x", 0.0), 4),
+        "y": round(metric_map.get("body_pose_y", 0.0), 4),
+        "heading": round(metric_map.get("body_pose_heading", 0.0), 4),
+    }
+    locomotion_target_m = (
+        round(metric_map["locomotion_target_m"], 4)
+        if "locomotion_target_m" in metric_map
+        else None
+    )
+    locomotion_elapsed_ms = int(metric_map.get("locomotion_elapsed_ms", 0.0))
+    gait_cycles = int(metric_map.get("gait_cycles", 0.0))
+
     mission_state = "IDLE"
     try:
         ms_stub = mission_service_pb2_grpc.MissionServiceStub(channel)
@@ -60,6 +78,10 @@ def main() -> int:
         "stand_state": stand_state,
         "battery_pct": battery_pct,
         "mission_state": mission_state,
+        "body_pose_se2": body_pose,
+        "locomotion_target_m": locomotion_target_m,
+        "locomotion_elapsed_ms": locomotion_elapsed_ms,
+        "gait_cycles": gait_cycles,
     }
     json.dump(out, sys.stdout)
     return 0

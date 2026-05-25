@@ -1,9 +1,7 @@
 /**
- * Loader for the Sketchfab "Boston Dynamics — Spot" model.
- *
- * Drop the downloaded ``.glb`` file at
- *   ``mocks/web_mock/public/boston_dynamics_robot_spot.glb``
- * (Git LFS tracks ``*.glb`` via ``.gitattributes``).
+ * Loader for the Sketchfab "Boston Dynamics — Spot" model. Drop the
+ * downloaded ``.glb`` at ``mocks/web_mock/public/spot.glb`` (Git LFS tracks
+ * ``*.glb`` via ``.gitattributes``).
  *
  * Source: https://sketchfab.com/3d-models/boston-dynamics-robot-spot-71354fd599e34db898a7d083851b792a
  * License: see Sketchfab page (free, attribution required).
@@ -11,7 +9,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
-const MODEL_URL = "/boston_dynamics_robot_spot.glb";
+const MODEL_URL = "/spot.glb";
 
 export type SpotRig = {
   /** The full model group — add this to your scene. */

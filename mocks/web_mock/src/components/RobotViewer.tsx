@@ -165,20 +165,32 @@ export function PlaceholderOverlay({
 }) {
   return (
     <div className="model-overlay" data-testid="placeholder-overlay">
-      <strong>Placeholder model</strong>
+      <strong>
+        {variant === "walk" ? "POC walk — ground-plane only" : "Placeholder model"}
+      </strong>
       <span>
-        {variant === "walk"
-          ? "Cartoon walk animation — drop a real .glb at "
-          : "Box + cylinders stand-in — drop a real .glb at "}
-        <code>mocks/web_mock/public/spot.glb</code> to replace it.{" "}
-        <a
-          href="https://sketchfab.com/3d-models/boston-dynamics-robot-spot-71354fd599e34db898a7d083851b792a"
-          target="_blank"
-          rel="noreferrer"
-        >
-          Sketchfab source
-        </a>
-        .
+        {variant === "walk" ? (
+          <>
+            Body translates along the ground via{" "}
+            <code>body_pose_se2.x</code> — legs do not move. To make it
+            actually walk, drag-and-drop an animated <code>.glb</code> with
+            a gait <code>AnimationClip</code> in place of{" "}
+            <code>mocks/web_mock/public/spot.glb</code>.
+          </>
+        ) : (
+          <>
+            Box + cylinders stand-in — drop a real .glb at{" "}
+            <code>mocks/web_mock/public/spot.glb</code> to replace it.{" "}
+            <a
+              href="https://sketchfab.com/3d-models/boston-dynamics-robot-spot-71354fd599e34db898a7d083851b792a"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Sketchfab source
+            </a>
+            .
+          </>
+        )}
       </span>
       <span className="hint">
         Click + drag (or one-finger touch) to orbit · two-finger pinch to zoom.

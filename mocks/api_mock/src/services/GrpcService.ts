@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import type { RobotStateSummary } from "../models/RobotState";
+import type { RobotStateSummary, WalkCommandResult } from "../models/RobotState";
 import type {
   MissionActionResult,
   MissionStateSnapshot,
@@ -58,6 +58,14 @@ export class GrpcService {
       "-m",
       "robot_mock_helpers.mission",
       "question",
+    ]);
+  }
+
+  static walkCommand(distance_m: number): Promise<WalkCommandResult> {
+    return runHelper<WalkCommandResult>([
+      "-m",
+      "robot_mock_helpers.walk_command",
+      String(distance_m),
     ]);
   }
 

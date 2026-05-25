@@ -59,9 +59,11 @@ class RobotCommandServicer(robot_command_service_pb2_grpc.RobotCommandServiceSer
                     cmd_type = "mobility_other"
 
         # Validate: for mobility commands, motors must be ON (or POWERING_ON close enough).
+        # Trajectory is exempt so the API ``/api/robot/command`` walk path can
+        # exercise locomotion without the full power-on/lease dance.
         with ROBOT_STATE.lock:
             ROBOT_STATE.settle_power_state()
-            if is_mobility and cmd_type in ("stand", "sit", "velocity", "trajectory"):
+            if is_mobility and cmd_type in ("stand", "sit", "velocity"):
                 if ROBOT_STATE.motor_power_state != ROBOT_STATE.MOTOR_ON:
                     response.status = robot_command_pb2.RobotCommandResponse.STATUS_NOT_POWERED_ON
                     response.message = "motors not on"
@@ -87,6 +89,16 @@ class RobotCommandServicer(robot_command_service_pb2_grpc.RobotCommandServiceSer
             elif cmd_type == "safe_power_off":
                 ROBOT_STATE.stand_state = "sit"
                 ROBOT_STATE.motor_power_state = ROBOT_STATE.MOTOR_OFF
+            elif cmd_type == "trajectory":
+                # Parse goal pose from the final trajectory point.
+                traj = cmd.synchronized_command.mobility_command.se2_trajectory_request.trajectory
+                if traj.points:
+                    last = traj.points[-1]
+                    ROBOT_STATE.start_locomotion(
+                        last.pose.position.x,
+                        last.pose.position.y,
+                        last.pose.angle,
+                    )
 
         response.status = robot_command_pb2.RobotCommandResponse.STATUS_OK
         response.robot_command_id = cid
@@ -127,10 +139,18 @@ class RobotCommandServicer(robot_command_service_pb2_grpc.RobotCommandServiceSer
                 msg = fb.synchronized_feedback.mobility_command_feedback
                 msg.status = basic_command_pb2.RobotCommandFeedbackStatus.STATUS_PROCESSING
                 t = msg.se2_trajectory_feedback
-                t.status = basic_command_pb2.SE2TrajectoryCommand.Feedback.STATUS_AT_GOAL
-                t.body_movement_status = (
-                    basic_command_pb2.SE2TrajectoryCommand.Feedback.BODY_STATUS_SETTLED
-                )
+                if ROBOT_STATE.locomotion_target_m is None:
+                    t.status = basic_command_pb2.SE2TrajectoryCommand.Feedback.STATUS_AT_GOAL
+                    t.body_movement_status = (
+                        basic_command_pb2.SE2TrajectoryCommand.Feedback.BODY_STATUS_SETTLED
+                    )
+                else:
+                    t.status = (
+                        basic_command_pb2.SE2TrajectoryCommand.Feedback.STATUS_GOING_TO_GOAL
+                    )
+                    t.body_movement_status = (
+                        basic_command_pb2.SE2TrajectoryCommand.Feedback.BODY_STATUS_MOVING
+                    )
                 t.final_goal_status = (
                     basic_command_pb2.SE2TrajectoryCommand.Feedback.FINAL_GOAL_STATUS_ACHIEVABLE
                 )

@@ -1,6 +1,7 @@
 """Shared, thread-safe robot state for the mock Spot server."""
 from __future__ import annotations
 
+import math
 import threading
 import time
 import uuid
@@ -37,6 +38,13 @@ class CommandRecord:
     issued_ns: int
     is_mobility: bool = True
     completed: bool = False
+
+
+@dataclass
+class BodyPoseSE2:
+    x: float = 0.0
+    y: float = 0.0
+    heading: float = 0.0
 
 
 @dataclass
@@ -80,6 +88,13 @@ class RobotState:
         self.stand_state: str = "sit"
         # Body pose stub (z height when standing vs sitting)
         self.body_height: float = 0.20
+        # SE2 ground-plane pose (x, y in metres; heading in radians about Z).
+        self.body_pose_se2: BodyPoseSE2 = BodyPoseSE2()
+        # Locomotion (SE2 trajectory) tracking.
+        self.locomotion_target_m: Optional[float] = None
+        self.locomotion_start_time_ns: Optional[int] = None
+        self.gait_cycles: int = 0
+        self._locomotion_stop: Optional[threading.Event] = None
         # Commands
         self.commands: Dict[int, CommandRecord] = {}
         self._next_command_id: int = 1000
@@ -119,6 +134,67 @@ class RobotState:
             if ep.stop_level < 4:  # any actual stop
                 return True
         return False
+
+    def locomotion_elapsed_ms(self) -> int:
+        if self.locomotion_start_time_ns is None:
+            return 0
+        return int((time.time_ns() - self.locomotion_start_time_ns) / 1e6)
+
+    def start_locomotion(
+        self, goal_x: float, goal_y: float, goal_heading: float = 0.0
+    ) -> None:
+        """Begin a 1.0 m/s straight-line advance toward (goal_x, goal_y).
+
+        Caller must hold ``self.lock``. Cancels any prior locomotion.
+        """
+        if self._locomotion_stop is not None:
+            self._locomotion_stop.set()
+
+        start_x = self.body_pose_se2.x
+        start_y = self.body_pose_se2.y
+        dx = goal_x - start_x
+        dy = goal_y - start_y
+        target_m = math.hypot(dx, dy)
+        if target_m < 1e-6:
+            self.body_pose_se2.heading = goal_heading
+            return
+
+        self.locomotion_target_m = target_m
+        self.locomotion_start_time_ns = time.time_ns()
+        self.gait_cycles = 0
+
+        stop_event = threading.Event()
+        self._locomotion_stop = stop_event
+
+        SPEED = 1.0  # m/s
+        CYCLES_PER_SEC = 2.0  # 2 Hz trot
+
+        def runner():
+            while not stop_event.is_set():
+                time.sleep(0.1)
+                with self.lock:
+                    if (
+                        stop_event.is_set()
+                        or self.locomotion_start_time_ns is None
+                    ):
+                        return
+                    elapsed = (
+                        time.time_ns() - self.locomotion_start_time_ns
+                    ) / 1e9
+                    travelled = elapsed * SPEED
+                    if travelled >= target_m:
+                        self.body_pose_se2.x = goal_x
+                        self.body_pose_se2.y = goal_y
+                        self.body_pose_se2.heading = goal_heading
+                        self.gait_cycles = int(elapsed * CYCLES_PER_SEC)
+                        self.locomotion_target_m = None
+                        return
+                    frac = travelled / target_m
+                    self.body_pose_se2.x = start_x + dx * frac
+                    self.body_pose_se2.y = start_y + dy * frac
+                    self.gait_cycles = int(elapsed * CYCLES_PER_SEC)
+
+        threading.Thread(target=runner, daemon=True).start()
 
     def new_command_id(self) -> int:
         self._next_command_id += 1

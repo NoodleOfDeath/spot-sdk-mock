@@ -9,12 +9,22 @@ export type TestEntry = {
   suite: string;
 };
 
+export type BodyPoseSE2 = {
+  x: number;
+  y: number;
+  heading: number;
+};
+
 export type RobotState = {
   power_state: string;
   estop_cut: boolean;
   stand_state: string;
   battery_pct: number;
   mission_state: "IDLE" | "PLAYING" | "PAUSED";
+  body_pose_se2: BodyPoseSE2;
+  locomotion_target_m: number | null;
+  locomotion_elapsed_ms: number;
+  gait_cycles: number;
 };
 
 export type MissionQuestion = {
@@ -43,6 +53,14 @@ export async function fetchRobotState(): Promise<RobotState | null> {
   } catch {
     return null;
   }
+}
+
+export async function postWalkCommand(distance_m: number): Promise<void> {
+  await fetch(`${API_BASE}/api/robot/command`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ type: "walk", distance_m }),
+  });
 }
 
 export async function postMission(

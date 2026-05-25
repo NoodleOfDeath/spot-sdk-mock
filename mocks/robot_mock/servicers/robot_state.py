@@ -1,6 +1,7 @@
 """RobotStateService implementation."""
 from __future__ import annotations
 
+import math
 import time
 
 from bosdyn.api import (
@@ -32,12 +33,14 @@ def _identity_pose(z: float = 0.0) -> geometry_pb2.SE3Pose:
     return p
 
 
-def _build_kinematic_state(standing: bool) -> robot_state_pb2.KinematicState:
+def _build_kinematic_state(
+    standing: bool, body_x: float, body_y: float, body_heading: float
+) -> robot_state_pb2.KinematicState:
     ks = robot_state_pb2.KinematicState()
     ks.acquisition_timestamp.CopyFrom(_now_ts())
     snap = ks.transforms_snapshot
     # Tree: vision -> odom -> body -> {ground_plane}
-    # body relative to odom carries the stand/sit height.
+    # body relative to odom carries SE2 pose (x, y, yaw) and stand/sit height.
     body_z = 0.50 if standing else 0.20
 
     def add_edge(child: str, parent: str, z: float = 0.0):
@@ -52,7 +55,19 @@ def _build_kinematic_state(standing: bool) -> robot_state_pb2.KinematicState:
     snap.child_to_parent_edge_map["vision"].parent_frame_name = ""
     snap.child_to_parent_edge_map["vision"].parent_tform_child.rotation.w = 1.0
     add_edge("odom", "vision", 0.0)
-    add_edge("body", "odom", body_z)
+
+    # body -> odom carries SE2 pose
+    snap.child_to_parent_edge_map["body"].parent_frame_name = "odom"
+    body_pose = snap.child_to_parent_edge_map["body"].parent_tform_child
+    body_pose.position.x = body_x
+    body_pose.position.y = body_y
+    body_pose.position.z = body_z
+    half = body_heading / 2.0
+    body_pose.rotation.w = math.cos(half)
+    body_pose.rotation.x = 0.0
+    body_pose.rotation.y = 0.0
+    body_pose.rotation.z = math.sin(half)
+
     add_edge("flat_body", "body", 0.0)
     add_edge("gpe", "vision", 0.0)
     # Zero velocity
@@ -106,7 +121,14 @@ class RobotStateServicer(robot_state_service_pb2_grpc.RobotStateServiceServicer)
 
             # Kinematic state
             standing = ROBOT_STATE.stand_state == "stand"
-            state.kinematic_state.CopyFrom(_build_kinematic_state(standing))
+            state.kinematic_state.CopyFrom(
+                _build_kinematic_state(
+                    standing,
+                    ROBOT_STATE.body_pose_se2.x,
+                    ROBOT_STATE.body_pose_se2.y,
+                    ROBOT_STATE.body_pose_se2.heading,
+                )
+            )
 
         return response
 
@@ -115,12 +137,25 @@ class RobotStateServicer(robot_state_service_pb2_grpc.RobotStateServiceServicer)
         fill_response_header(response, request)
         m = response.robot_metrics
         m.timestamp.CopyFrom(_now_ts())
-        # Add a couple of metrics
-        for name, value, unit in [
-            ("distance", 0.0, "m"),
-            ("gait_cycles", 0.0, ""),
-            ("electric_power", 50.0, "W"),
-        ]:
+        with ROBOT_STATE.lock:
+            entries = [
+                ("distance", float(ROBOT_STATE.body_pose_se2.x), "m"),
+                ("gait_cycles", float(ROBOT_STATE.gait_cycles), ""),
+                ("electric_power", 50.0, "W"),
+                ("body_pose_x", float(ROBOT_STATE.body_pose_se2.x), "m"),
+                ("body_pose_y", float(ROBOT_STATE.body_pose_se2.y), "m"),
+                ("body_pose_heading", float(ROBOT_STATE.body_pose_se2.heading), "rad"),
+                (
+                    "locomotion_elapsed_ms",
+                    float(ROBOT_STATE.locomotion_elapsed_ms()),
+                    "ms",
+                ),
+            ]
+            if ROBOT_STATE.locomotion_target_m is not None:
+                entries.append(
+                    ("locomotion_target_m", float(ROBOT_STATE.locomotion_target_m), "m")
+                )
+        for name, value, unit in entries:
             entry = m.metrics.add()
             entry.label = name
             entry.float_value = value
