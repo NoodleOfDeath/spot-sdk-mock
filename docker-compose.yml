@@ -1,0 +1,35 @@
+services:
+  robot-mock:
+    build:
+      context: ./robot-mock
+    container_name: spot_robot_mock
+    ports:
+      - "44444:44444"
+
+  api-mock:
+    build:
+      context: ./api-mock
+    container_name: spot_api_mock
+    ports:
+      - "3001:3001"
+    environment:
+      ROBOT_MOCK_HOST: robot-mock
+      ROBOT_MOCK_PORT: "44444"
+      PORT: "3001"
+    volumes:
+      - ./robot-mock/robot_mock:/app/robot_mock:ro
+    depends_on:
+      - robot-mock
+
+  web-mock:
+    build:
+      context: ./web-mock
+      args:
+        VITE_API_BASE: http://localhost:3001
+    container_name: spot_web
+    ports:
+      - "4000:4000"
+    environment:
+      VITE_API_BASE: http://localhost:3001
+    depends_on:
+      - api-mock

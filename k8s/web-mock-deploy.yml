@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-mock
+  labels: { app: web-mock }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: web-mock } }
+  template:
+    metadata: { labels: { app: web-mock } }
+    spec:
+      containers:
+        - name: web-mock
+          image: spot-sdk-mock/web-mock:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { containerPort: 4000, name: http }
+          env:
+            - { name: VITE_API_BASE, value: "/api" }
+          readinessProbe:
+            tcpSocket: { port: http }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-mock
+spec:
+  selector: { app: web-mock }
+  ports:
+    - { name: http, port: 4000, targetPort: http }

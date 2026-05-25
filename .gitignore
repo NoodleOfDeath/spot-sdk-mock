@@ -1,0 +1,64 @@
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ---- Logs / temp ----
+*.log
+*.tmp
+*.pid
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.venv/
+venv/
+env/
+*.egg
+
+# ---- Node ----
+node_modules/
+.npm/
+.pnpm-store/
+npm-debug.log*
+yarn-error.log*
+.eslintcache
+
+# ---- Build artifacts ----
+dist/
+build/
+out/
+.cache/
+*.tsbuildinfo
+
+# ---- Vite ----
+.vite/
+vite.config.*.timestamp-*
+
+# ---- Playwright ----
+playwright/test-results/
+playwright/playwright-report/
+playwright/blob-report/
+playwright/.cache/
+
+# ---- Generated manifests ----
+**/.test_manifest.json
+
+# ---- Docker ----
+.docker/
+
+# ---- Local environment overrides ----
+.env
+.env.*.local
+.env.local
