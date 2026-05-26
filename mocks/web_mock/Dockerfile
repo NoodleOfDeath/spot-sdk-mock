@@ -6,7 +6,7 @@ COPY tsconfig.json vite.config.ts index.html /app/
 COPY src /app/src
 COPY public /app/public
 ARG VITE_API_BASE=http://localhost:3001
-ARG VITE_GITHUB_URL=#
+ARG VITE_GITHUB_URL=https://github.com/noodleofdeath/spot-sdk-mock
 ENV VITE_API_BASE=$VITE_API_BASE
 ENV VITE_GITHUB_URL=$VITE_GITHUB_URL
 RUN npx tsc --noEmit && npx vite build

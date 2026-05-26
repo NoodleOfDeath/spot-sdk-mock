@@ -30,12 +30,12 @@ services:
       context: ./mocks/web_mock
       args:
         VITE_API_BASE: http://localhost:3001
-        VITE_GITHUB_URL: https://github.com/your-org/spot-mock-stack
+        VITE_GITHUB_URL: https://github.com/noodleofdeath/spot-sdk-mock
     container_name: spot_web_mock
     ports:
       - "4000:4000"
     environment:
       VITE_API_BASE: http://localhost:3001
-      VITE_GITHUB_URL: https://github.com/your-org/spot-mock-stack
+      VITE_GITHUB_URL: https://github.com/noodleofdeath/spot-sdk-mock
     depends_on:
       - api_mock
