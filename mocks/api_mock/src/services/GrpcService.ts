@@ -1,5 +1,9 @@
 import { spawn } from "node:child_process";
-import type { RobotStateSummary, WalkCommandResult } from "../models/RobotState";
+import type {
+  PowerCommandResult,
+  RobotStateSummary,
+  WalkCommandResult,
+} from "../models/RobotState";
 import type {
   MissionActionResult,
   MissionStateSnapshot,
@@ -58,6 +62,14 @@ export class GrpcService {
       "-m",
       "robot_mock_helpers.mission",
       "question",
+    ]);
+  }
+
+  static powerCommand(on: boolean): Promise<PowerCommandResult> {
+    return runHelper<PowerCommandResult>([
+      "-m",
+      "robot_mock_helpers.power_command",
+      on ? "on" : "off",
     ]);
   }
 

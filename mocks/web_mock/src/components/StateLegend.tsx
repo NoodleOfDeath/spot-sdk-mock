@@ -99,12 +99,12 @@ export function StateLegend() {
     : [{ field: "Status", value: "Loading…", tone: "muted" }];
 
   return (
-    <table
-      className="state-legend"
-      data-testid="state-legend"
-      aria-label="Robot state legend"
-    >
-      <tbody>
+    <div className="state-legend" data-testid="state-legend">
+      <table
+        className="state-legend-table"
+        aria-label="Robot state legend"
+      >
+        <tbody>
         {rows.map((r) => (
           <tr
             key={r.field}
@@ -117,5 +117,6 @@ export function StateLegend() {
         ))}
       </tbody>
     </table>
+    </div>
   );
 }

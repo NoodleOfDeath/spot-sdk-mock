@@ -70,12 +70,35 @@ export async function fetchRobotState(): Promise<RobotState | null> {
   }
 }
 
+export type WalkCommandError = { error: string };
+
 export async function postWalkCommand(distance_m: number): Promise<void> {
-  await fetch(`${API_BASE}/api/robot/command`, {
+  const res = await fetch(`${API_BASE}/api/robot/command`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ type: "walk", distance_m }),
   });
+  if (!res.ok) {
+    let detail = `walk command failed: HTTP ${res.status}`;
+    try {
+      const body = (await res.json()) as Partial<WalkCommandError>;
+      if (body?.error) detail = body.error;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail);
+  }
+}
+
+export async function postPowerCommand(on: boolean): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/robot/power`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ on }),
+  });
+  if (!res.ok) {
+    throw new Error(`power command failed: HTTP ${res.status}`);
+  }
 }
 
 export async function postMission(

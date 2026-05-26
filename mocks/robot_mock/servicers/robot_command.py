@@ -58,12 +58,15 @@ class RobotCommandServicer(robot_command_service_pb2_grpc.RobotCommandServiceSer
                 else:
                     cmd_type = "mobility_other"
 
-        # Validate: for mobility commands, motors must be ON (or POWERING_ON close enough).
-        # Trajectory is exempt so the API ``/api/robot/command`` walk path can
-        # exercise locomotion without the full power-on/lease dance.
+        # Validate: for mobility commands, motors must be ON.
         with ROBOT_STATE.lock:
             ROBOT_STATE.settle_power_state()
-            if is_mobility and cmd_type in ("stand", "sit", "velocity"):
+            if is_mobility and cmd_type in (
+                "stand",
+                "sit",
+                "velocity",
+                "trajectory",
+            ):
                 if ROBOT_STATE.motor_power_state != ROBOT_STATE.MOTOR_ON:
                     response.status = robot_command_pb2.RobotCommandResponse.STATUS_NOT_POWERED_ON
                     response.message = "motors not on"

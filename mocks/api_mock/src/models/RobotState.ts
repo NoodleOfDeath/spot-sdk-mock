@@ -63,3 +63,21 @@ export interface WalkCommandResult {
   command_id: number;
   status: string;
 }
+
+/**
+ * Payload for ``POST /api/robot/power``.
+ *
+ * @example { "on": true }
+ */
+export interface PowerCommandRequest {
+  /** ``true`` powers on motors, ``false`` powers them off. */
+  on: boolean;
+}
+
+/**
+ * Response from ``POST /api/robot/power``.
+ */
+export interface PowerCommandResult {
+  power_command_id: number;
+  status: string;
+}

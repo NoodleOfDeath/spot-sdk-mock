@@ -1,8 +1,8 @@
 import { Body, Controller, Get, Post, Response, Route, Tags } from "tsoa";
 import type {
+  PowerCommandRequest,
+  PowerCommandResult,
   RobotStateSummary,
-  WalkCommandRequest,
-  WalkCommandResult,
 } from "../models/RobotState";
 import type { ErrorResponse } from "../models/MissionState";
 import { GrpcService } from "../services/GrpcService";
@@ -28,20 +28,16 @@ export class RobotController extends Controller {
   }
 
   /**
-   * Kick off a straight-line walk along +X for ``distance_m`` metres.
-   * Translates into an ``SE2TrajectoryCommand`` against robot_mock.
+   * Issue ``REQUEST_ON_MOTORS`` / ``REQUEST_OFF_MOTORS`` to robot_mock's
+   * ``PowerService``.
    */
   @Response<ErrorResponse>(503, "Unable to reach robot_mock")
-  @Post("command")
-  public async command(
-    @Body() body: WalkCommandRequest
-  ): Promise<WalkCommandResult> {
-    if (body?.type !== "walk") {
-      this.setStatus(400);
-      throw new Error(`unsupported command type: ${body?.type}`);
-    }
+  @Post("power")
+  public async power(
+    @Body() body: PowerCommandRequest
+  ): Promise<PowerCommandResult> {
     try {
-      return await GrpcService.walkCommand(body.distance_m);
+      return await GrpcService.powerCommand(body?.on === true);
     } catch (err) {
       this.setStatus(503);
       throw new Error(

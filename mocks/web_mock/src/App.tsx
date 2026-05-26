@@ -95,14 +95,16 @@ export function App() {
           }}
         >
           <div className="panel viewer-panel" style={{ minHeight: 0 }}>
-            <div
-              className="viewer"
-              data-testid="viewer-container"
-              style={{ height: `calc(${sizes.viewer}px - 200px)` }}
-            >
-              <RobotViewer />
+            <div className="viewer-row" data-testid="viewer-row">
+              <div
+                className="viewer"
+                data-testid="viewer-container"
+                style={{ height: "100%" }}
+              >
+                <RobotViewer />
+              </div>
+              <StateLegend />
             </div>
-            <StateLegend />
           </div>
           <Splitter
             direction="horizontal"

@@ -4,6 +4,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import {
   fetchRobotState,
+  postPowerCommand,
   postWalkCommand,
   type RobotState,
 } from "../api.js";
@@ -37,6 +38,13 @@ export function RobotViewer() {
   const resetCameraRef = useRef<(() => void) | null>(null);
   const [walking, setWalking] = useState(false);
   const [showOverlay, setShowOverlay] = useState(true);
+  const [powerState, setPowerState] = useState<string>("OFF");
+  const [toast, setToast] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    window.setTimeout(() => setToast((t) => (t === msg ? null : t)), 4_000);
+  };
 
   useEffect(() => {
     let cancel = false;
@@ -46,6 +54,7 @@ export function RobotViewer() {
       if (!cancel && next) {
         stateRef.current = next;
         setWalking(next.locomotion_target_m != null);
+        setPowerState(next.power_state.replace(/^STATE_/, ""));
       }
     };
     tick();
@@ -61,8 +70,9 @@ export function RobotViewer() {
     setWalking(true);
     try {
       await postWalkCommand(5.0);
-    } catch {
+    } catch (err) {
       setWalking(false);
+      showToast(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -73,10 +83,21 @@ export function RobotViewer() {
     setWalking(true);
     try {
       await postWalkCommand(-currentX);
-    } catch {
+    } catch (err) {
       setWalking(false);
+      showToast(err instanceof Error ? err.message : String(err));
     }
   };
+
+  const togglePower = async () => {
+    const isOn = powerState === "ON";
+    try {
+      await postPowerCommand(!isOn);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err));
+    }
+  };
+  const powerBusy = powerState === "POWERING_ON" || powerState === "POWERING_OFF";
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -180,9 +201,14 @@ export function RobotViewer() {
         !!s && (s.power_state === "ON" || s.stand_state === "standing");
       setStance(standing);
 
-      // Always translate from body_pose_se2.x — this works both during a
-      // walk and once the body has come to rest at a non-zero pose.
-      const bx = s?.body_pose_se2?.x ?? 0;
+      // Movement (and gait) only happens when motors are ON. While the
+      // robot is powered off / powering up / down, the model stays parked
+      // at its last seen pose.
+      const powered =
+        s?.power_state === "ON" || s?.power_state === "STATE_ON";
+      const bx = powered ? s?.body_pose_se2?.x ?? 0 : window.__spotX != null
+        ? (window.__spotX as number) / unitsPerMeter
+        : 0;
       const targetX = bx * unitsPerMeter;
       rig.root.position.x = targetX;
       rig.root.position.y = groundY;
@@ -190,7 +216,9 @@ export function RobotViewer() {
       window.__spotX = rig.root.position.x;
 
       const isWalking =
-        s?.locomotion_target_m != null && s.locomotion_target_m > 0;
+        powered &&
+        s?.locomotion_target_m != null &&
+        s.locomotion_target_m > 0;
 
       // Leg gait only animates while locomotion is in flight; otherwise
       // legs freeze (placeholder rig only — the real GLB has no per-leg
@@ -301,6 +329,46 @@ export function RobotViewer() {
           Reset Camera
         </button>
       </div>
+      <div className="power-overlay">
+        <button
+          type="button"
+          data-testid="power-button"
+          data-power-state={powerState}
+          className={
+            powerState === "ON" || powerState === "POWERING_ON"
+              ? "power-btn power-btn-off"
+              : "power-btn power-btn-on"
+          }
+          onClick={togglePower}
+          disabled={powerBusy}
+          aria-label={
+            powerState === "ON" || powerState === "POWERING_ON"
+              ? "Power Off"
+              : "Power On"
+          }
+        >
+          {powerBusy ? (
+            <>
+              <span className="spinner" aria-hidden="true" />
+              {powerState === "POWERING_ON" ? "Powering On…" : "Powering Off…"}
+            </>
+          ) : powerState === "ON" ? (
+            "Power Off"
+          ) : (
+            "Power On"
+          )}
+        </button>
+      </div>
+      {toast && (
+        <div
+          className="toast"
+          data-testid="toast"
+          role="alert"
+          aria-live="assertive"
+        >
+          {toast}
+        </div>
+      )}
       {showOverlay && <PlaceholderOverlay />}
     </div>
   );

@@ -6,6 +6,7 @@ import cors from "cors";
 import swaggerUi from "swagger-ui-express";
 
 import { RegisterRoutes } from "./generated/routes";
+import { GrpcService } from "./services/GrpcService";
 import {
   LOCAL_PYTEST_PATHS,
   TestRunnerService,
@@ -16,6 +17,32 @@ import { patchSseRoutes } from "./swagger-patch";
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// -- Raw walk-command endpoint -----------------------------------------------
+// Mounted BEFORE the TSOA router so we can control the 400 body shape used
+// when the robot is not powered on.
+app.post("/api/robot/command", async (req: Request, res: Response) => {
+  const body = req.body as { type?: string; distance_m?: number };
+  if (body?.type !== "walk") {
+    res.status(400).json({ error: `unsupported command type: ${body?.type}` });
+    return;
+  }
+  if (typeof body.distance_m !== "number") {
+    res.status(400).json({ error: "distance_m must be a number" });
+    return;
+  }
+  try {
+    const result = await GrpcService.walkCommand(body.distance_m);
+    if (result.status === "STATUS_NOT_POWERED_ON") {
+      res.status(400).json({ error: "robot not powered on" });
+      return;
+    }
+    res.json(result);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(503).json({ error: msg });
+  }
+});
 
 // -- TSOA-generated routes for the documentable, JSON-bodied endpoints. ----
 // TSOA's ``basePath`` only labels the spec; it doesn't prefix actual routes.
